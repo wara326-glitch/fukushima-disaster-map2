@@ -10,47 +10,58 @@
 *{box-sizing:border-box}body{margin:0;font-family:-apple-system,BlinkMacSystemFont,"Segoe UI","Noto Sans JP",sans-serif;background:var(--bg);color:var(--text)}
 header{padding:11px 14px;border-bottom:1px solid var(--line);display:flex;gap:8px;align-items:center;flex-wrap:wrap}
 h1{font-size:18px;margin:0}.badge{font-size:11px;background:#1f2937;border:1px solid #374151;padding:3px 7px;border-radius:999px}
-.app{display:grid;grid-template-columns:370px 1fr;height:calc(100vh - 53px)}
+.app{display:grid;grid-template-columns:390px 1fr;height:calc(100vh - 53px)}
 aside{overflow:auto;border-right:1px solid var(--line);background:var(--panel);padding:12px}#map{height:100%;width:100%}
 .card{background:#0f172a;border:1px solid var(--line);border-radius:10px;padding:10px;margin-bottom:10px}
 label{font-size:12px;color:var(--muted);display:block;margin-bottom:4px}select,input,button{font:inherit}
 select,input{width:100%;padding:9px;border-radius:7px;border:1px solid #374151;background:#111827;color:var(--text)}
 button{border:1px solid #3b82f6;background:#1d4ed8;color:#fff;padding:9px 11px;border-radius:7px;cursor:pointer}
 button.secondary{background:#1f2937;border-color:#4b5563}.row{display:flex;gap:8px}.row>*{flex:1}
-.small{font-size:11px;color:var(--muted);line-height:1.5}.result{border:1px solid #334155;background:#0b1324;border-radius:9px;padding:9px;margin-bottom:7px;cursor:pointer}
-.result:hover{border-color:#60a5fa}.name{font-weight:700;font-size:13px}.meta{font-size:11px;color:#aab2bf;margin-top:3px}
-.times{display:flex;gap:6px;margin-top:7px;flex-wrap:wrap}.pill{font-size:11px;padding:4px 6px;border-radius:6px;background:#1f2937}.road{border:1px solid #60a5fa}.air{border:1px solid #34d399}
-.candidate{border:1px solid #334155;background:#0b1324;border-radius:8px;padding:8px;margin-top:6px;cursor:pointer;font-size:12px}
-@media(max-width:850px){header{padding:8px 10px}h1{font-size:16px}.app{grid-template-columns:1fr;grid-template-rows:47vh 53vh;height:calc(100vh - 48px)}aside{grid-row:2;border-right:none;border-top:1px solid var(--line);padding:10px}#map{grid-row:1}.card{padding:9px}button,select,input{min-height:42px}}
+.filters{display:flex;gap:6px;flex-wrap:wrap}.filters label{display:flex;align-items:center;gap:5px;background:#111827;border:1px solid #374151;padding:6px 8px;border-radius:7px;color:var(--text)}
+.filters input{width:auto}.small{font-size:11px;color:var(--muted);line-height:1.5}
+.result{border:1px solid #334155;background:#0b1324;border-radius:9px;padding:9px;margin-bottom:7px;cursor:pointer}.result:hover{border-color:#60a5fa}
+.name{font-weight:700;font-size:13px}.meta{font-size:11px;color:#aab2bf;margin-top:3px}.times{display:flex;gap:6px;margin-top:7px;flex-wrap:wrap}
+.pill{font-size:11px;padding:4px 6px;border-radius:6px;background:#1f2937}.road{border:1px solid #60a5fa}.air{border:1px solid #34d399}
+.dot{display:inline-block;width:10px;height:10px;border-radius:50%;margin-right:4px}.candidate{border:1px solid #334155;background:#0b1324;border-radius:8px;padding:8px;margin-top:6px;cursor:pointer;font-size:12px}
+@media(max-width:850px){header{padding:8px 10px}h1{font-size:16px}.app{grid-template-columns:1fr;grid-template-rows:47vh 53vh;height:calc(100vh - 48px)}aside{grid-row:2;border-right:none;border-top:1px solid var(--line);padding:10px}#map{grid-row:1}button,select,input{min-height:42px}}
 </style>
 </head>
 <body>
-<header><h1>全国 局地災害 医療アクセスマップ</h1><span class="badge">全国対応</span><span class="badge">陸路 / 空路</span><span class="badge">スマホ対応</span></header>
+<header><h1>全国 局地災害 医療アクセスマップ</h1><span class="badge">全国対応</span><span class="badge">公的データ</span><span class="badge">陸路 / 空路</span></header>
 <div class="app"><aside>
-<div class="card"><label>1. 発災地点</label><div class="small">住所・病院名・店舗名・施設名を入力、または地図をクリックしてください。</div>
+
+<div class="card"><label>1. 発災地点</label>
+<div class="small">住所・病院名・店舗名・施設名を入力、または地図をクリックしてください。</div>
 <div class="row" style="margin-top:8px"><input id="addressInput" placeholder="例：熊本県庁、仙台駅、○○病院"><button id="addressBtn" style="flex:0 0 auto">地点検索</button></div>
-<div id="searchCandidates" style="display:none;margin-top:7px"></div><div id="incidentText" style="margin-top:7px;font-size:12px">未設定</div>
+<div id="searchCandidates" style="display:none;margin-top:7px"></div>
+<div id="incidentText" style="margin-top:7px;font-size:12px">未設定</div>
 <div class="row" style="margin-top:8px"><button id="geoBtn">現在地を使用</button><button id="clearBtn" class="secondary">解除</button></div></div>
 
-<div class="card"><label>2. 周辺病院を検索</label>
-<div class="row"><div><label>検索半径</label><select id="radiusKm"><option value="20">20 km</option><option value="50" selected>50 km</option><option value="100">100 km</option></select></div>
-<div><label>表示上限</label><select id="maxHosp"><option value="10">10施設</option><option value="20" selected>20施設</option><option value="50">50施設</option></select></div></div>
-<button id="findHospBtn" style="width:100%;margin-top:8px">周辺病院を検索</button>
-<div class="small" style="margin-top:7px">病院位置はOpenStreetMapの公開データを利用します。救命救急センター・災害拠点病院・二次救急指定の公式判定とは異なります。</div></div>
+<div class="card"><label>2. 表示する医療機関</label>
+<div class="filters">
+<label><input type="checkbox" id="fCritical" checked><span class="dot" style="background:#ef4444"></span>救命救急センター</label>
+<label><input type="checkbox" id="fDisaster" checked><span class="dot" style="background:#f59e0b"></span>災害拠点病院</label>
+<label><input type="checkbox" id="fSecondary" checked><span class="dot" style="background:#3b82f6"></span>二次救急（救急車1000台以上/年）</label>
+</div>
+<div class="small" style="margin-top:7px">複数区分に該当する病院は、優先順位「救命救急＝赤 → 災害拠点＝黄 → 二次救急＝青」で1点表示します。</div></div>
 
 <div class="card"><label>3. 所要時間</label>
 <div class="row"><button id="calcBtn">陸路を計算</button><select id="sortMode"><option value="road">陸路時間順</option><option value="air">空路時間順</option><option value="distance">直線距離順</option><option value="name">病院名順</option></select></div>
+<div class="row" style="margin-top:8px"><div><label>表示範囲</label><select id="radiusKm"><option value="50">50 km</option><option value="100" selected>100 km</option><option value="200">200 km</option><option value="500">500 km</option><option value="9999">全国</option></select></div><div><label>最大表示</label><select id="maxHosp"><option value="20">20</option><option value="50" selected>50</option><option value="100">100</option><option value="500">500</option></select></div></div>
 <div class="row" style="margin-top:8px"><div><label>空路速度 km/h</label><input id="airSpeed" type="number" value="220"></div><div><label>固定加算 分</label><input id="airOverhead" type="number" value="5"></div></div>
-<div class="small" style="margin-top:7px">陸路はOSRMの道路ルートによる通常走行時間です。リアルタイム渋滞、通行止め、緊急走行補正は含みません。</div></div>
+<div class="small" style="margin-top:7px">陸路はOSRMの通常走行時間。リアルタイム渋滞・通行止め・緊急走行補正は含みません。</div></div>
 
-<div id="status" class="small" style="margin:6px 2px"></div>
-<div style="font-weight:700;font-size:13px;margin:8px 2px">検索結果 <span id="hospitalCount">0</span>施設</div>
+<div id="status" class="small" style="margin:6px 2px">全国公的データを読み込み中…</div>
+<div style="font-weight:700;font-size:13px;margin:8px 2px">左下一覧：<span id="hospitalCount">0</span>施設</div>
 <div id="results"></div>
 
-<div class="card small" style="margin-top:10px"><b>全国版について</b><br>
-本アプリは局地災害時のアクセス検討用試作です。実際の救急搬送・受入判断では、各都道府県、消防、EMIS、厚生労働省「医療情報ネット（ナビイ）」等の最新情報を確認してください。</div>
+<div class="card small" style="margin-top:10px"><b>データ基準</b><br>
+救命救急センター：厚生労働省公表一覧。災害拠点病院：厚生労働省「令和8年4月1日現在」。二次救急の救急車1000台以上は、全国で個別値を取得できる公的データ項目を利用し、該当判定可能な施設のみ表示します。データ未報告・不備は対象外となる場合があります。</div>
+
 </aside><div id="map"></div></div>
 <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
-<script src="data.js?v=20260908-national1"></script>
-<script src="app.js?v=20260908-national1"></script>
+<script src="https://cdn.jsdelivr.net/npm/jszip@3.10.1/dist/jszip.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/papaparse@5.4.1/papaparse.min.js"></script>
+<script src="data.js?v=20260908-national2"></script>
+<script src="app.js?v=20260908-national2"></script>
 </body></html>
