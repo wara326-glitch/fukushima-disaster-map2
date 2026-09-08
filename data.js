@@ -1,1 +1,1 @@
-const MHLW_HOSPITAL_ZIP="https://www.mhlw.go.jp/content/11121000/01-1_hospital_facility_info_20260601.csv.zip";
+const NATIONAL_HOSPITALS=[];
