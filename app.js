@@ -26,10 +26,12 @@ function hav(a,b){const R=6371,tr=x=>x*Math.PI/180,dLat=tr(b.lat-a.lat),dLon=tr(
 function airMin(km){return km/(Number(airSpeed.value)||220)*60+(Number(airOverhead.value)||0)}
 
 function loadStaticData(){
-  allHospitals=(typeof NATIONAL_HOSPITALS!=="undefined" && Array.isArray(NATIONAL_HOSPITALS))?NATIONAL_HOSPITALS:[];
+  allHospitals=(typeof NATIONAL_HOSPITALS!=="undefined" && Array.isArray(NATIONAL_HOSPITALS))?NATIONAL_HOSPITALS.map(h=>({...h,pref:h.pref||""})):[];
   if(allHospitals.length){
     status.textContent=`全国データ ${allHospitals.length}施設を読み込みました。`;
     draw();
+    const pts=allHospitals.filter(h=>h.lat!=null&&h.lng!=null).map(h=>[h.lat,h.lng]);
+    if(pts.length>1) map.fitBounds(pts,{padding:[18,18],maxZoom:6});
   }else{
     status.textContent="全国病院データを更新中です。数分後に再読み込みしてください。";
   }
@@ -46,12 +48,12 @@ async function ensureNearbyCoords(){
 function filtered(){
  let a=allHospitals.filter(visible).filter(h=>h.lat!=null&&h.lng!=null).map(h=>({...h,dist:incident?hav(incident,h):null}));
  if(incident){const r=Number(radiusKm.value);if(r<9999)a=a.filter(h=>h.dist<=r);a.sort((x,y)=>(x.dist??1e9)-(y.dist??1e9));}
- else a.sort((x,y)=>x.pref.localeCompare(y.pref,"ja")||x.name.localeCompare(y.name,"ja"));
+ else a.sort((x,y)=>(x.address||"").localeCompare((y.address||""),"ja")||x.name.localeCompare(y.name,"ja"));
  return a.slice(0,Number(maxHosp.value));
 }
 function draw(){
  markers.forEach(m=>map.removeLayer(m));markers.clear();const arr=filtered();
- arr.forEach((h,i)=>{const m=L.circleMarker([h.lat,h.lng],{radius:h.critical?8:7,color:"#fff",weight:1,fillColor:color(h),fillOpacity:.95}).addTo(map).bindPopup(`<b>${h.name}</b><br>${label(h)}<br>${h.pref} ${h.address}${h.ambulance!=null?"<br>救急車受入 "+h.ambulance.toLocaleString()+"件/年":""}`);markers.set(i,m)});
+ arr.forEach((h,i)=>{const m=L.circleMarker([h.lat,h.lng],{radius:h.critical?8:7,color:"#fff",weight:1,fillColor:color(h),fillOpacity:.95}).addTo(map).bindPopup(`<b>${h.name}</b><br>${label(h)}<br>${h.address||""}${h.ambulance!=null?"<br>救急車受入 "+h.ambulance.toLocaleString()+"件/年":""}`);markers.set(i,m)});
  render(arr);
 }
 function render(arr=filtered()){
@@ -59,7 +61,7 @@ function render(arr=filtered()){
  arr=arr.map((h,i)=>({...h,_i:i,road:roadTimes[h.name],roadKm:roadDistances[h.name],air:incident?airMin(h.dist):null}));
  arr.sort((a,b)=>mode==="road"?(a.road??1e9)-(b.road??1e9):mode==="air"?(a.air??1e9)-(b.air??1e9):mode==="name"?a.name.localeCompare(b.name,"ja"):(a.dist??1e9)-(b.dist??1e9));
  hospitalCount.textContent=arr.length;
- results.innerHTML=arr.map(h=>`<div class="result" data-name="${encodeURIComponent(h.name)}"><div class="name"><span class="dot" style="background:${color(h)}"></span>${h.name}</div><div class="meta">${label(h)}<br>${h.pref} ${h.address}${h.ambulance!=null?"<br>救急車受入 "+h.ambulance.toLocaleString()+"件/年":""}${h.dist!=null?" ・ 直線 "+h.dist.toFixed(1)+"km":""}</div><div class="times"><span class="pill road">陸路 ${h.road!=null?Math.round(h.road)+"分 / "+h.roadKm.toFixed(1)+"km":"未計算"}</span><span class="pill air">空路 ${h.air!=null?"約"+Math.round(h.air)+"分":"未計算"}</span></div></div>`).join("");
+ results.innerHTML=arr.map(h=>`<div class="result" data-name="${encodeURIComponent(h.name)}"><div class="name"><span class="dot" style="background:${color(h)}"></span>${h.name}</div><div class="meta">${label(h)}<br>${h.address||""}${h.ambulance!=null?"<br>救急車受入 "+h.ambulance.toLocaleString()+"件/年":""}${h.dist!=null?" ・ 直線 "+h.dist.toFixed(1)+"km":""}</div><div class="times"><span class="pill road">陸路 ${h.road!=null?Math.round(h.road)+"分 / "+h.roadKm.toFixed(1)+"km":"未計算"}</span><span class="pill air">空路 ${h.air!=null?"約"+Math.round(h.air)+"分":"未計算"}</span></div></div>`).join("");
  document.querySelectorAll(".result").forEach(el=>el.onclick=()=>showRoute(decodeURIComponent(el.dataset.name)));
 }
 
