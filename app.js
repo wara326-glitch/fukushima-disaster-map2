@@ -25,39 +25,16 @@ function label(h){let a=[];if(h.critical)a.push("救命救急センター");if(h
 function hav(a,b){const R=6371,tr=x=>x*Math.PI/180,dLat=tr(b.lat-a.lat),dLon=tr(b.lng-a.lng),z=Math.sin(dLat/2)**2+Math.cos(tr(a.lat))*Math.cos(tr(b.lat))*Math.sin(dLon/2)**2;return 2*R*Math.asin(Math.sqrt(z))}
 function airMin(km){return km/(Number(airSpeed.value)||220)*60+(Number(airOverhead.value)||0)}
 
-async function loadNationalData(){
- try{
-  status.textContent="厚生労働省 全国病院データを読み込み中…";
-  const r=await fetch(MHLW_HOSPITAL_ZIP,{mode:"cors"});
-  if(!r.ok)throw new Error("download");
-  const ab=await r.arrayBuffer(),zip=await JSZip.loadAsync(ab);
-  const csvName=Object.keys(zip.files).find(n=>/\.csv$/i.test(n));
-  if(!csvName)throw new Error("csv");
-  const text=await zip.files[csvName].async("string");
-  const parsed=Papa.parse(text,{header:true,skipEmptyLines:true});
-  const rows=parsed.data,keys=parsed.meta.fields||[],k=findKeys(keys);
-  if(!k.name)throw new Error("name");
-  allHospitals=rows.map(row=>{
-    const ambulance=k.ambulance?num(row[k.ambulance]):null;
-    return {
-      name:String(row[k.name]||"").trim(),
-      pref:k.pref?String(row[k.pref]||"").trim():"",
-      address:k.address?String(row[k.address]||"").trim():"",
-      lat:k.lat?num(row[k.lat]):null,lng:k.lng?num(row[k.lng]):null,
-      critical:k.critical?yes(row[k.critical]):false,
-      disaster:k.disaster?yes(row[k.disaster]):false,
-      secondary:k.secondary?yes(row[k.secondary]):false,
-      ambulance
-    }
-  }).filter(h=>h.name&&(h.critical||h.disaster||(h.secondary&&h.ambulance!=null&&h.ambulance>=1000)));
-  const needGeo=allHospitals.filter(h=>h.lat==null||h.lng==null).length;
-  status.textContent=`公的データ ${allHospitals.length}施設を読込。座標未登録 ${needGeo}施設。`;
-  draw();
- }catch(e){
-  status.textContent="全国公的データの自動読込に失敗しました。厚労省ZIPのCORS制限等の可能性があります。";
- }
+function loadStaticData(){
+  allHospitals=(typeof NATIONAL_HOSPITALS!=="undefined" && Array.isArray(NATIONAL_HOSPITALS))?NATIONAL_HOSPITALS:[];
+  if(allHospitals.length){
+    status.textContent=`全国データ ${allHospitals.length}施設を読み込みました。`;
+    draw();
+  }else{
+    status.textContent="全国病院データを更新中です。数分後に再読み込みしてください。";
+  }
 }
-loadNationalData();
+loadStaticData();
 
 async function geocode(h){if(h.lat!=null&&h.lng!=null)return true;try{const q=encodeURIComponent((h.pref? h.pref+" ":"")+h.address+" "+h.name);const r=await fetch(`https://nominatim.openstreetmap.org/search?format=json&limit=1&countrycodes=jp&q=${q}`,{headers:{"Accept-Language":"ja"}});const j=await r.json();if(!j?.length)return false;h.lat=Number(j[0].lat);h.lng=Number(j[0].lon);return true}catch(e){return false}}
 async function ensureNearbyCoords(){
