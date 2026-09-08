@@ -11,21 +11,143 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      - name: Inspect MHLW emergency workbook
+      - name: Build static national hospital dataset
+        shell: bash
         run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq poppler-utils
           python -m pip install --quiet openpyxl
           python - <<'PY'
-          import urllib.request, openpyxl, os
-          u="https://www.mhlw.go.jp/content/10800000/001391872.xlsx"
-          b=urllib.request.urlopen(u,timeout=60).read()
-          open("/tmp/a.xlsx","wb").write(b)
-          wb=openpyxl.load_workbook("/tmp/a.xlsx",data_only=True,read_only=True)
-          print("SHEETS",wb.sheetnames)
-          for ws in wb.worksheets:
-              print("SHEET",ws.title,ws.max_row,ws.max_column)
-              for r in ws.iter_rows(min_row=1,max_row=min(ws.max_row,20),values_only=True):
-                  vals=[str(v) if v is not None else "" for v in r[:30]]
-                  if any(vals):
-                      print("ROW", "|".join(vals))
-              print("END",ws.title)
+          import csv,io,json,re,urllib.request,urllib.parse,zipfile,subprocess,openpyxl,time,html
+
+          OPEN_ZIP="https://www.mhlw.go.jp/content/11121000/01-1_hospital_facility_info_20260601.csv.zip"
+          EMERGENCY_XLSX="https://www.mhlw.go.jp/content/10800000/001391872.xlsx"
+          DISASTER_PDF="https://www.mhlw.go.jp/content/10800000/001705093.pdf"
+          CRITICAL_PAGE="https://www.mhlw.go.jp/stf/newpage_32614.html"
+
+          def get(url):
+              req=urllib.request.Request(url,headers={"User-Agent":"national-disaster-medical-map/1.0"})
+              return urllib.request.urlopen(req,timeout=120).read()
+
+          def norm(s):
+              s=html.unescape(str(s or ""))
+              s=re.sub(r"\s+","",s)
+              s=s.replace("（","(").replace("）",")")
+              for t in ["高度救命救急センター","救命救急センター","附属病院","付属病院"]:
+                  s=s.replace(t,"")
+              s=re.sub(r"[・･　 \-－ー()（）]","",s)
+              return s
+
+          # National open hospital master: name/address/coords
+          b=get(OPEN_ZIP)
+          z=zipfile.ZipFile(io.BytesIO(b))
+          csvname=next(n for n in z.namelist() if n.lower().endswith(".csv"))
+          rows=list(csv.DictReader(io.StringIO(z.read(csvname).decode("utf-8-sig",errors="replace"))))
+          master=[]
+          for r in rows:
+              try: lat=float(r.get("所在地座標（緯度）") or "")
+              except: lat=None
+              try: lng=float(r.get("所在地座標（経度）") or "")
+              except: lng=None
+              master.append({
+                "name":(r.get("正式名称") or "").strip(),
+                "prefcode":str(r.get("都道府県コード") or "").strip(),
+                "address":(r.get("所在地") or "").strip(),
+                "lat":lat,"lng":lng
+              })
+          bynorm={}
+          for h in master:
+              n=norm(h["name"])
+              if n: bynorm.setdefault(n,[]).append(h)
+
+          # Current critical-care center page text
+          raw=get(CRITICAL_PAGE).decode("utf-8",errors="ignore")
+          critical_text=norm(re.sub(r"<[^>]+>"," ",raw))
+
+          # Current disaster-base hospital PDF text
+          open("/tmp/disaster.pdf","wb").write(get(DISASTER_PDF))
+          subprocess.run(["pdftotext","-layout","/tmp/disaster.pdf","/tmp/disaster.txt"],check=True)
+          disaster_text=norm(open("/tmp/disaster.txt",encoding="utf-8",errors="ignore").read())
+
+          # R4 nationwide emergency-care workbook: A2 has secondary status and ambulance counts.
+          open("/tmp/emergency.xlsx","wb").write(get(EMERGENCY_XLSX))
+          wb=openpyxl.load_workbook("/tmp/emergency.xlsx",data_only=True,read_only=True)
+          ws=wb["調査票A2"]
+
+          selected={}
+          def find_master(name,pref_hint=""):
+              n=norm(name)
+              candidates=bynorm.get(n,[])
+              if candidates: return candidates[0]
+              # containment fallback for suffix/prefix differences
+              hits=[]
+              for mn,arr in bynorm.items():
+                  if len(n)>=5 and (n in mn or mn in n):
+                      hits.extend(arr)
+              if len(hits)==1:return hits[0]
+              return None
+
+          # Blue: secondary emergency institutions with ambulance acceptance >=1000/year.
+          for row in ws.iter_rows(min_row=9,values_only=True):
+              vals=list(row)
+              if len(vals)<30: continue
+              name=str(vals[7] or "").replace("\n"," ").strip()
+              if not name: continue
+              secondary=any(str(vals[i] or "").strip() in {"1","1.0"} for i in (18,19,20))
+              try: amb=int(float(str(vals[25]).replace(",",""))) if vals[25] not in (None,"") else None
+              except: amb=None
+              if not (secondary and amb is not None and amb>=1000): continue
+              m=find_master(name,str(vals[2] or ""))
+              h={
+                "name":m["name"] if m else name,
+                "address":m["address"] if m else "",
+                "lat":m["lat"] if m else None,"lng":m["lng"] if m else None,
+                "critical":False,"disaster":False,"secondary":True,
+                "ambulance":amb,"secondary_source":"R4"
+              }
+              selected[norm(h["name"])]=h
+
+          # Red/yellow from current official lists, matched against national master.
+          for m in master:
+              n=norm(m["name"])
+              if not n or len(n)<3: continue
+              critical=(n in critical_text)
+              disaster=(n in disaster_text)
+              if not (critical or disaster): continue
+              h=selected.get(n,{
+                "name":m["name"],"address":m["address"],"lat":m["lat"],"lng":m["lng"],
+                "critical":False,"disaster":False,"secondary":False,"ambulance":None
+              })
+              h["critical"]=h.get("critical",False) or critical
+              h["disaster"]=h.get("disaster",False) or disaster
+              selected[n]=h
+
+          # Geocode unmatched blue rows with Nominatim.
+          missing=[h for h in selected.values() if h["lat"] is None or h["lng"] is None]
+          for i,h in enumerate(missing):
+              q=(h["name"]+" "+h.get("address","")).strip()
+              try:
+                  u="https://nominatim.openstreetmap.org/search?format=json&limit=1&countrycodes=jp&q="+urllib.parse.quote(q)
+                  j=json.loads(get(u).decode())
+                  if j:
+                      h["lat"]=float(j[0]["lat"]);h["lng"]=float(j[0]["lon"])
+              except Exception as e:
+                  print("geocode failed",h["name"],e)
+              time.sleep(0.15)
+
+          hospitals=[h for h in selected.values() if h["lat"] is not None and h["lng"] is not None]
+          hospitals.sort(key=lambda h:(not h["critical"],not h["disaster"],not h["secondary"],h["name"]))
+          print("TOTAL",len(hospitals),
+                "critical",sum(h["critical"] for h in hospitals),
+                "disaster",sum(h["disaster"] for h in hospitals),
+                "secondary1000",sum(h["secondary"] for h in hospitals))
+          with open("data.js","w",encoding="utf-8") as f:
+              f.write("const NATIONAL_HOSPITALS="+json.dumps(hospitals,ensure_ascii=False,separators=(",",":"))+";\n")
           PY
+      - name: Commit generated data
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add data.js
+          git diff --cached --quiet || git commit -m "Generate static nationwide emergency hospital dataset"
+          git push
